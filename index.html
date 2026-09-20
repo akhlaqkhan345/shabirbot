@@ -75,6 +75,14 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 .feed .tag::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--gold);margin-right:6px}
 .feed .tf{position:absolute;right:10px;top:10px;font-size:12px;background:rgba(0,0,0,.65);border:1px solid var(--line);border-radius:8px;padding:4px 8px;color:var(--gold);z-index:1}
 canvas{display:block;width:100%;height:190px}
+.scan{position:absolute;top:0;bottom:0;left:-80px;width:80px;z-index:1;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(255,200,44,.32));border-right:2px solid rgba(255,200,44,.95);
+  box-shadow:6px 0 22px rgba(255,200,44,.55);animation:sweep 1.5s linear infinite}
+@keyframes sweep{to{left:100%}}
+.feed.done .scan{display:none}
+.head.finished .ring{display:none}
+.legend{position:absolute;left:10px;bottom:8px;font-size:11px;color:var(--mute);z-index:1}
+.legend b{display:inline-block;width:14px;height:3px;border-radius:2px;margin:0 5px 2px 8px;vertical-align:middle}
 .steps{list-style:none;margin:0;padding:0;font-size:14px;color:var(--mute)}
 .steps li{padding:5px 0}
 .steps li.done{color:var(--text)}
@@ -93,7 +101,7 @@ canvas{display:block;width:100%;height:190px}
 .rows span:first-child{color:var(--mute)}
 .note{font-size:12.5px;color:var(--mute);line-height:1.55;margin-top:12px;font-weight:600}
 .err{color:#ff8a94;font-size:15px;line-height:1.5}
-@media (prefers-reduced-motion:reduce){.ring{animation:none}}
+@media (prefers-reduced-motion:reduce){.ring,.scan{animation:none}}
 @media (max-width:420px){.durations{grid-template-columns:repeat(4,1fr)}h1{font-size:19px}}
 </style>
 </head>
@@ -128,9 +136,9 @@ canvas{display:block;width:100%;height:190px}
   <section class="card hidden" id="analysis">
     <div class="feed">
       <span class="tag">LIVE FEED</span><span class="tf" id="tf">1M</span>
-      <canvas id="chart"></canvas>
+      <canvas id="chart"></canvas><div class="scan"></div><div class="legend hidden" id="legend"><b style="background:#ffc82c"></b>EMA 9<b style="background:#5ab0ff"></b>EMA 21</div>
     </div>
-    <div class="head"><div class="ring"></div><div><div style="color:var(--gold);font-size:17px">Analyzing market…</div></div></div>
+    <div class="head" id="ahead"><div class="ring"></div><div><div id="atitle" style="color:var(--gold);font-size:17px">Analyzing market…</div></div></div>
     <ul class="steps" id="steps"></ul>
   </section>
 
@@ -211,11 +219,11 @@ function analyze(closes, h){
   }
   const n = closes.length-1, s = score[n];
   return { direction: s >= 2 ? "UP" : s <= -2 ? "DOWN" : "NONE", rsi: +rsi[n].toFixed(1),
-           ema_trend: e9[n] > e21[n] ? "up" : "down", win_rate: total ? +(100*wins/total).toFixed(1) : null, samples: total };
+           ema_trend: e9[n] > e21[n] ? "up" : "down", e9: e9.slice(-60), e21: e21.slice(-60), win_rate: total ? +(100*wins/total).toFixed(1) : null, samples: total };
 }
 
-function drawChart(cs){
-  const cv = $("#chart"), dpr = window.devicePixelRatio || 1;
+function drawChart(all, r){
+  const cs = all.slice(-60), cv = $("#chart"), dpr = window.devicePixelRatio || 1;
   const W = cv.clientWidth, H = cv.clientHeight; cv.width = W*dpr; cv.height = H*dpr;
   const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0,0,W,H);
   const hi = Math.max(...cs.map(c=>c.h)), lo = Math.min(...cs.map(c=>c.l)), pad = 26;
@@ -225,30 +233,46 @@ function drawChart(cs){
     g.beginPath(); g.moveTo(x, y(c.h)); g.lineTo(x, y(c.l)); g.lineWidth = 1; g.stroke();
     g.fillRect(x - step*.32, y(Math.max(c.o,c.c)), step*.64, Math.max(2, Math.abs(y(c.o) - y(c.c))));
   });
-  const last = cs[cs.length-1].c; g.setLineDash([4,4]); g.strokeStyle = "rgba(255,200,44,.5)";
+  const last = cs[cs.length-1].c; g.setLineDash([4,4]); g.strokeStyle = "rgba(255,200,44,.5)"; g.lineWidth = 1;
   g.beginPath(); g.moveTo(0,y(last)); g.lineTo(W,y(last)); g.stroke(); g.setLineDash([]);
+  if(r){
+    [[r.e9,"#ffc82c"],[r.e21,"#5ab0ff"]].forEach(([arr,col]) => {
+      g.beginPath(); g.strokeStyle = col; g.lineWidth = 1.8;
+      arr.forEach((v,i) => { const x = i*step + step/2; i ? g.lineTo(x,y(v)) : g.moveTo(x,y(v)); });
+      g.stroke();
+    });
+  }
 }
 
-const STEPS = ["Fetching live candle data","Calculating EMA, RSI and MACD","Backtesting the same rule on recent history"];
+const STEPS = ["Connecting to market feed","Fetching live candle data","Scanning price action","Measuring momentum (MACD)","Checking trend and RSI (EMA, RSI)","Backtesting the same rule"];
 const setSteps = n => $("#steps").innerHTML = STEPS.map((s,i) => `<li class="${i<n?"done":i===n?"now":""}">${s}</li>`).join("");
 const fmt = d => d.toLocaleTimeString([], {hour12:false});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function generate(){
   const btn = $("#go"); btn.disabled = true; btn.textContent = "ANALYZING…";
-  $("#result").classList.add("hidden"); $("#analysis").classList.remove("hidden"); setSteps(0);
+  $("#result").classList.add("hidden"); $("#analysis").classList.remove("hidden");
+  $(".feed").classList.remove("done"); $("#ahead").classList.remove("finished"); $("#legend").classList.add("hidden");
+  $("#atitle").textContent = "Analyzing market…"; setSteps(0);
   const sel = $("#asset").value, pair = sel === "random" ? PAIRS[Math.floor(Math.random()*PAIRS.length)] : sel;
   const [interval, h] = EXP[expiry];
   try{
     if(!marketOpen()) throw new Error("Market is closed on weekends.");
-    const cs = await getCandles(pair, interval); $("#tf").textContent = interval.toUpperCase(); drawChart(cs); setSteps(1);
-    await sleep(500); const r = analyze(cs.map(c => c.c), h); setSteps(2); await sleep(500); setSteps(3);
+    await sleep(600); setSteps(1);
+    const cs = await getCandles(pair, interval); $("#tf").textContent = interval.toUpperCase(); drawChart(cs); setSteps(2);
+    await sleep(1100); setSteps(3);
+    const r = analyze(cs.map(c => c.c), h);
+    await sleep(1100); setSteps(4);
+    await sleep(1100); drawChart(cs, r); $("#legend").classList.remove("hidden"); setSteps(5);
+    await sleep(1100); setSteps(6);
+    $(".feed").classList.add("done"); $("#ahead").classList.add("finished"); $("#atitle").textContent = "Analysis complete · " + pair;
     const now = new Date();
     render({ ...r, pair, expiry, entry: now, exp: new Date(now.getTime() + secs(expiry)*1000), low_res: secs(expiry) < 60 });
   }catch(e){
+    $("#analysis").classList.add("hidden");
     $("#result").innerHTML = `<div class="err">${e.message}</div>`; $("#result").classList.remove("hidden");
   }finally{
-    $("#analysis").classList.add("hidden"); btn.textContent = "GENERATE SIGNAL"; refreshStatus();
+    btn.textContent = "GENERATE SIGNAL"; refreshStatus();
   }
 }
 
