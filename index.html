@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="apple-touch-icon" href="icon.png">
-<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png?v=2">
+<link rel="icon" type="image/png" href="icon.png?v=2">
 <meta name="apple-mobile-web-app-title" content="Shabir Bot">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -87,8 +87,8 @@ canvas{display:block;width:100%;height:190px}
 @keyframes sweep{to{left:100%}}
 .feed.done .scan{display:none}
 .head.finished .ring{display:none}
-.legend{position:absolute;left:10px;bottom:8px;font-size:11px;color:var(--mute);z-index:1}
-.legend b{display:inline-block;width:14px;height:3px;border-radius:2px;margin:0 5px 2px 8px;vertical-align:middle}
+.legend{position:absolute;left:8px;right:8px;bottom:6px;font-size:10px;line-height:1.5;color:var(--mute);z-index:1}
+.legend b{display:inline-block;width:12px;height:3px;border-radius:2px;margin:0 4px 2px 8px;vertical-align:middle}.legend b:first-child{margin-left:0}
 .steps{list-style:none;margin:0;padding:0;font-size:14px;color:var(--mute)}
 .steps li{padding:5px 0}
 .steps li.done{color:var(--text)}
@@ -143,7 +143,7 @@ canvas{display:block;width:100%;height:190px}
   <section class="card hidden" id="analysis">
     <div class="feed">
       <span class="tag">LIVE FEED</span><span class="tf" id="tf">1M</span>
-      <canvas id="chart"></canvas><div class="scan"></div><div class="legend hidden" id="legend"><b style="background:#ffc82c"></b>Fast trend<b style="background:#5ab0ff"></b>Slow trend</div>
+      <canvas id="chart"></canvas><div class="scan"></div><div class="legend hidden" id="legend"><b style="background:#ffc82c"></b>Fast trend<b style="background:#5ab0ff"></b>Slow trend<b style="background:#ff6b7a"></b>Resistance<b style="background:#3ddc84"></b>Support</div>
     </div>
     <div class="head" id="ahead"><div class="ring"></div><div><div id="atitle" style="color:var(--gold);font-size:17px">Analyzing market…</div></div></div>
     <ul class="steps" id="steps"></ul>
@@ -211,22 +211,63 @@ async function getCandles(pair, interval){
 const ema = (a, span) => { const k = 2/(span+1), o = [a[0]]; for(let i=1;i<a.length;i++) o.push(a[i]*k + o[i-1]*(1-k)); return o; };
 const wilder = a => { const k = 1/14, o = [a[0]]; for(let i=1;i<a.length;i++) o.push(a[i]*k + o[i-1]*(1-k)); return o; };
 
-function analyze(closes, h){
+function analyze(cs, h){
+  const closes = cs.map(c => c.c), n = closes.length;
   const e9 = ema(closes,9), e21 = ema(closes,21), g = [0], l = [0];
-  for(let i=1;i<closes.length;i++){ const d = closes[i]-closes[i-1]; g.push(Math.max(d,0)); l.push(Math.max(-d,0)); }
+  for(let i=1;i<n;i++){ const d = closes[i]-closes[i-1]; g.push(Math.max(d,0)); l.push(Math.max(-d,0)); }
   const ag = wilder(g), al = wilder(l);
   const rsi = ag.map((x,i) => al[i] === 0 ? (x === 0 ? 50 : 100) : 100 - 100/(1 + x/al[i]));
   const m12 = ema(closes,12), m26 = ema(closes,26), macd = m12.map((x,i) => x - m26[i]), sig = ema(macd,9);
   const hist = macd.map((x,i) => x - sig[i]);
+
+  // support / resistance: swing highs and lows, using only candles that were already closed at that time
+  const atr = cs.map((c,i) => { let s = 0, k = 0; for(let j=Math.max(0,i-13); j<=i; j++){ s += cs[j].h - cs[j].l; k++; } return s/k; });
+  const PL = 5;
+  const pivots = i => {
+    const out = [];
+    for(let j=Math.max(PL, i-150); j<=i-PL; j++){
+      let isH = true, isL = true;
+      for(let k=1;k<=PL;k++){
+        if(cs[j-k].h > cs[j].h || cs[j+k].h > cs[j].h) isH = false;
+        if(cs[j-k].l < cs[j].l || cs[j+k].l < cs[j].l) isL = false;
+      }
+      if(isH) out.push(cs[j].h);
+      if(isL) out.push(cs[j].l);
+    }
+    return out;
+  };
+  const zone = i => {
+    const c = closes[i], tol = 0.6*atr[i]; let up = Infinity, dn = Infinity;
+    for(const p of pivots(i)){ if(p > c) up = Math.min(up, p-c); else dn = Math.min(dn, c-p); }
+    const nearR = up <= tol, nearS = dn <= tol;
+    return nearR && !nearS ? "resistance" : nearS && !nearR ? "support" : "none";
+  };
+  const zones = closes.map((_,i) => i < 30 ? "none" : zone(i));
+
   const score = closes.map((_,i) => Math.sign(e9[i]-e21[i]) + Math.sign(hist[i])
-      + (rsi[i] > 55 ? 1 : rsi[i] < 45 ? -1 : 0) - (rsi[i] > 75 ? 2 : 0) + (rsi[i] < 25 ? 2 : 0));
+      + (rsi[i] > 55 ? 1 : rsi[i] < 45 ? -1 : 0) - (rsi[i] > 75 ? 2 : 0) + (rsi[i] < 25 ? 2 : 0)
+      + (zones[i] === "support" ? 1 : zones[i] === "resistance" ? -1 : 0));
   let wins = 0, total = 0;
-  for(let i=30;i<closes.length-h;i++){
+  for(let i=30;i<n-h;i++){
     if(Math.abs(score[i]) >= 2){ total++; if((closes[i+h]-closes[i]) * Math.sign(score[i]) > 0) wins++; }
   }
-  const n = closes.length-1, s = score[n];
-  return { direction: s >= 2 ? "UP" : s <= -2 ? "DOWN" : "NONE", rsi: +rsi[n].toFixed(1),
-           ema_trend: e9[n] > e21[n] ? "up" : "down", e9: e9.slice(-60), e21: e21.slice(-60), win_rate: total ? +(100*wins/total).toFixed(1) : null, samples: total };
+  const last = n-1, s = score[last], px = closes[last];
+
+  // levels to draw: merge nearby pivots, keep repeated ones plus the closest above and below price
+  const merged = [], tolc = 0.4*atr[last];
+  pivots(last).sort((a,b) => a-b).forEach(p => {
+    const m = merged[merged.length-1];
+    if(m && p - m.max <= tolc){ m.sum += p; m.n++; m.max = p; } else merged.push({sum:p, n:1, max:p});
+  });
+  const all = merged.map(m => ({price:m.sum/m.n, touches:m.n}));
+  const above = all.filter(v => v.price > px).sort((a,b) => a.price-b.price)[0];
+  const below = all.filter(v => v.price <= px).sort((a,b) => b.price-a.price)[0];
+  const draw = new Set(all.filter(v => v.touches >= 2)); if(above) draw.add(above); if(below) draw.add(below);
+  const levels = [...draw].map(v => ({...v, kind: v.price > px ? "res" : "sup"}));
+
+  return { direction: s >= 2 ? "UP" : s <= -2 ? "DOWN" : "NONE", rsi: +rsi[last].toFixed(1),
+           ema_trend: e9[last] > e21[last] ? "up" : "down", e9: e9.slice(-60), e21: e21.slice(-60),
+           snr: zones[last], levels, win_rate: total ? +(100*wins/total).toFixed(1) : null, samples: total };
 }
 
 function drawChart(all, r){
@@ -242,6 +283,15 @@ function drawChart(all, r){
   });
   const last = cs[cs.length-1].c; g.setLineDash([4,4]); g.strokeStyle = "rgba(255,200,44,.5)"; g.lineWidth = 1;
   g.beginPath(); g.moveTo(0,y(last)); g.lineTo(W,y(last)); g.stroke(); g.setLineDash([]);
+  if(r && r.levels){
+    r.levels.forEach(v => {
+      if(v.price > lo && v.price < hi){
+        g.beginPath(); g.setLineDash([2,3]); g.lineWidth = 1.4;
+        g.strokeStyle = v.kind === "res" ? "rgba(255,107,122,.9)" : "rgba(61,220,132,.9)";
+        g.moveTo(0,y(v.price)); g.lineTo(W,y(v.price)); g.stroke(); g.setLineDash([]);
+      }
+    });
+  }
   if(r){
     [[r.e9,"#ffc82c"],[r.e21,"#5ab0ff"]].forEach(([arr,col]) => {
       g.beginPath(); g.strokeStyle = col; g.lineWidth = 1.8;
@@ -251,7 +301,7 @@ function drawChart(all, r){
   }
 }
 
-const STEPS = ["Connecting to market feed","Fetching live candle data","Scanning price action","Reading market momentum","Confirming trend direction","Verifying against recent history"];
+const STEPS = ["Connecting to market feed","Fetching live candle data","Scanning price action","Reading market momentum","Confirming trend direction","Mapping support and resistance zones","Verifying against recent history"];
 const setSteps = n => $("#steps").innerHTML = STEPS.map((s,i) => `<li class="${i<n?"done":i===n?"now":""}">${s}</li>`).join("");
 const fmt = d => d.toLocaleTimeString([], {hour12:false});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -268,10 +318,11 @@ async function generate(){
     await sleep(600); setSteps(1);
     const cs = await getCandles(pair, interval); $("#tf").textContent = interval.toUpperCase(); drawChart(cs); setSteps(2);
     await sleep(1100); setSteps(3);
-    const r = analyze(cs.map(c => c.c), h);
+    const r = analyze(cs, h);
     await sleep(1100); setSteps(4);
-    await sleep(1100); drawChart(cs, r); $("#legend").classList.remove("hidden"); setSteps(5);
-    await sleep(1100); setSteps(6);
+    await sleep(1100); setSteps(5);
+    await sleep(1100); drawChart(cs, r); $("#legend").classList.remove("hidden"); setSteps(6);
+    await sleep(1100); setSteps(7);
     $(".feed").classList.add("done"); $("#ahead").classList.add("finished"); $("#atitle").textContent = "Analysis complete · " + pair;
     const now = new Date();
     render({ ...r, pair, expiry, entry: now, exp: new Date(now.getTime() + secs(expiry)*1000), low_res: secs(expiry) < 60 });
@@ -296,6 +347,7 @@ function render(s){
       <div><span>Entry time</span><span>${fmt(s.entry)}</span></div>
       <div><span>Expiry time</span><span>${fmt(s.exp)}</span></div>
       <div><span>Strength · Trend</span><span>${s.rsi} · ${s.ema_trend}</span></div>
+      <div><span>Key level</span><span>${{support:"Near support",resistance:"Near resistance",none:"Open space"}[s.snr]}</span></div>
     </div>
     <p class="note credit">Sheryar Wazir</p>
     <p class="note" style="text-align:center;margin-top:4px">Trading involves risk.</p>`;
