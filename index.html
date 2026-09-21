@@ -100,6 +100,7 @@ canvas{display:block;width:100%;height:190px}
 .rows div{display:flex;justify-content:space-between;gap:12px;background:#151515;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:13px 14px;margin-bottom:8px;font-size:15px}
 .rows span:first-child{color:var(--mute)}
 .note{font-size:12.5px;color:var(--mute);line-height:1.55;margin-top:12px;font-weight:600}
+.credit{text-align:center;color:var(--gold);font-size:16px;font-weight:800;letter-spacing:.06em;margin-top:16px}
 .err{color:#ff8a94;font-size:15px;line-height:1.5}
 @media (prefers-reduced-motion:reduce){.ring,.scan{animation:none}}
 @media (max-width:420px){.durations{grid-template-columns:repeat(4,1fr)}h1{font-size:19px}}
@@ -136,7 +137,7 @@ canvas{display:block;width:100%;height:190px}
   <section class="card hidden" id="analysis">
     <div class="feed">
       <span class="tag">LIVE FEED</span><span class="tf" id="tf">1M</span>
-      <canvas id="chart"></canvas><div class="scan"></div><div class="legend hidden" id="legend"><b style="background:#ffc82c"></b>EMA 9<b style="background:#5ab0ff"></b>EMA 21</div>
+      <canvas id="chart"></canvas><div class="scan"></div><div class="legend hidden" id="legend"><b style="background:#ffc82c"></b>Fast trend<b style="background:#5ab0ff"></b>Slow trend</div>
     </div>
     <div class="head" id="ahead"><div class="ring"></div><div><div id="atitle" style="color:var(--gold);font-size:17px">Analyzing market…</div></div></div>
     <ul class="steps" id="steps"></ul>
@@ -147,9 +148,9 @@ canvas{display:block;width:100%;height:190px}
 
 <script>
 
-const PAIRS = ["EUR/USD", "EUR/GBP", "EUR/JPY", "GBP/JPY", "USD/JPY", "USD/CAD", "CAD/JPY", "AUD/JPY", "AUD/CAD", "AUD/USD", "GBP/USD"];
+const PAIRS = ["EUR/USD", "EUR/GBP", "EUR/JPY", "GBP/JPY", "USD/JPY", "USD/CAD", "CAD/JPY", "AUD/JPY", "AUD/CAD", "AUD/USD", "GBP/USD", "USD/CHF", "EUR/CHF", "CHF/JPY", "GBP/CAD", "GBP/AUD"];
 // expiry -> [candle interval, candles ahead used to judge a trade]
-const EXP = {"5s":["1min",1],"10s":["1min",1],"15s":["1min",1],"30s":["1min",1],"1m":["1min",1],"2m":["1min",2],"3m":["1min",3],
+const EXP = {"1m":["1min",1],"2m":["1min",2],"3m":["1min",3],
   "5m":["5min",1],"10m":["5min",2],"15m":["15min",1],"30m":["30min",1],"1h":["1h",1],"4h":["4h",1],"1d":["1day",1]};
 const EXPIRIES = Object.keys(EXP);
 const $ = s => document.querySelector(s);
@@ -181,7 +182,7 @@ function refreshKeyUI(){
 const tick = () => $("#clock").textContent = new Date().toLocaleTimeString([], {hour12:false});
 tick(); setInterval(tick, 1000); setInterval(refreshStatus, 60000);
 
-$("#asset").innerHTML = '<option value="random">Random — any asset</option>' + PAIRS.map(p => `<option>${p}</option>`).join("");
+$("#asset").innerHTML = PAIRS.map(p => `<option>${p}</option>`).join("");
 const box = $("#durations");
 EXPIRIES.forEach(e => {
   const b = document.createElement("button");
@@ -244,7 +245,7 @@ function drawChart(all, r){
   }
 }
 
-const STEPS = ["Connecting to market feed","Fetching live candle data","Scanning price action","Measuring momentum (MACD)","Checking trend and RSI (EMA, RSI)","Backtesting the same rule"];
+const STEPS = ["Connecting to market feed","Fetching live candle data","Scanning price action","Reading market momentum","Confirming trend direction","Verifying against recent history"];
 const setSteps = n => $("#steps").innerHTML = STEPS.map((s,i) => `<li class="${i<n?"done":i===n?"now":""}">${s}</li>`).join("");
 const fmt = d => d.toLocaleTimeString([], {hour12:false});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -254,7 +255,7 @@ async function generate(){
   $("#result").classList.add("hidden"); $("#analysis").classList.remove("hidden");
   $(".feed").classList.remove("done"); $("#ahead").classList.remove("finished"); $("#legend").classList.add("hidden");
   $("#atitle").textContent = "Analyzing market…"; setSteps(0);
-  const sel = $("#asset").value, pair = sel === "random" ? PAIRS[Math.floor(Math.random()*PAIRS.length)] : sel;
+  const pair = $("#asset").value;
   const [interval, h] = EXP[expiry];
   try{
     if(!marketOpen()) throw new Error("Market is closed on weekends.");
@@ -279,20 +280,19 @@ async function generate(){
 function render(s){
   const label = {UP:"UP",DOWN:"DOWN",NONE:"NO TRADE"}[s.direction];
   const sub = {UP:"BUY / CALL ▲",DOWN:"SELL / PUT ▼",NONE:"Indicators disagree. Skip this one."}[s.direction];
-  const wr = s.win_rate === null ? "Not enough data" : `${s.win_rate}% of ${s.samples} past signals`;
+  const wr = s.win_rate === null ? "Not enough data" : `${s.win_rate}% (last ${s.samples} signals)`;
   $("#result").innerHTML = `
     <div class="dir ${s.direction}">${label}</div><div class="sub">${sub}</div>
     <div class="rows">
       <div><span>Asset</span><span>${s.pair}</span></div>
       <div><span>Duration</span><span>${s.expiry}</span></div>
-      <div><span>Backtest win rate</span><span>${wr}</span></div>
+      <div><span>Win rate</span><span>${wr}</span></div>
       <div><span>Entry time</span><span>${fmt(s.entry)}</span></div>
       <div><span>Expiry time</span><span>${fmt(s.exp)}</span></div>
-      <div><span>RSI · EMA trend</span><span>${s.rsi} · ${s.ema_trend}</span></div>
+      <div><span>Strength · Trend</span><span>${s.rsi} · ${s.ema_trend}</span></div>
     </div>
-    <p class="note">Win rate shows how often this same rule was right on recent history. It is not a guarantee.
-    ${s.low_res ? "Durations under 1 minute use 1-minute candles, so treat them as low reliability." : ""}
-    Broker prices can differ slightly from this data feed.</p>`;
+    <p class="note credit">Sheryar Wazir</p>
+    <p class="note" style="text-align:center;margin-top:4px">Trading involves risk.</p>`;
   $("#result").classList.remove("hidden");
 }
 $("#go").onclick = generate;
