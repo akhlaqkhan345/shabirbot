@@ -110,11 +110,78 @@ canvas{display:block;width:100%;height:190px}
 .err{color:#ff8a94;font-size:15px;line-height:1.5}
 @media (prefers-reduced-motion:reduce){.ring,.scan{animation:none}}
 @media (max-width:420px){.durations{grid-template-columns:repeat(4,1fr)}h1{font-size:19px}}
+
+/* --- logo comet ring --- */
+.logo-wrap{position:relative;width:132px;height:132px;margin:0 auto 22px}
+.logo-wrap .logo{margin:0}
+.comet-ring{position:absolute;inset:-15px;border-radius:50%;pointer-events:none;z-index:0;
+  background:conic-gradient(from 0deg,
+    transparent 0deg, transparent 250deg,
+    rgba(255,200,44,0) 255deg, rgba(255,200,44,.55) 315deg, #fff7d6 345deg, rgba(255,200,44,.9) 356deg, rgba(255,200,44,0) 360deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3.5px),#000 calc(100% - 3.5px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 3.5px),#000 calc(100% - 3.5px));
+  filter:drop-shadow(0 0 7px rgba(255,200,44,.85));
+  animation:orbit 6s linear infinite;
+}
+@keyframes orbit{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.comet-ring{animation:none}}
+
+/* --- page entrance --- */
+.wrap{animation:pageIn .55s cubic-bezier(.16,1,.3,1) both}
+@keyframes pageIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+/* --- button ripple --- */
+.go{position:relative;overflow:hidden}
+.ripple{position:absolute;border-radius:50%;background:rgba(0,0,0,.28);transform:scale(0);
+  animation:rip .6s ease-out forwards;pointer-events:none}
+@keyframes rip{to{transform:scale(2.6);opacity:0}}
+
+/* --- duration press bounce --- */
+.durations button{transition:transform .12s ease}
+.durations button:active{transform:scale(.92)}
+
+/* --- custom asset dropdown --- */
+.dd{position:relative}
+.dd-trigger{width:100%;appearance:none;background:#161616 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%23ffc82c' stroke-width='2.4'/%3E%3C/svg%3E") no-repeat right 16px center;
+  color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:15px 44px 15px 16px;
+  font:inherit;font-size:16px;text-align:left;cursor:pointer;transition:transform .12s ease;display:block}
+.dd-trigger:active{transform:scale(.98)}
+.dd.open .dd-trigger{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 8l6-6 6 6' fill='none' stroke='%23ffc82c' stroke-width='2.4'/%3E%3C/svg%3E")}
+.dd-list{position:absolute;left:0;right:0;top:calc(100% + 8px);background:#141414;border:1px solid var(--line);
+  border-radius:14px;box-shadow:0 18px 40px rgba(0,0,0,.6),0 0 26px rgba(255,200,44,.14);
+  max-height:280px;overflow-y:auto;z-index:30;padding:6px;animation:ddIn .18s ease}
+@keyframes ddIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.dd-item{padding:13px 14px;border-radius:10px;font-size:16px;color:#fff;font-weight:700;
+  display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .12s ease,transform .12s ease}
+.dd-item:active{transform:scale(.98)}
+.dd-item.flash{background:rgba(255,200,44,.32)}
+.dd-item.sel{color:var(--gold)}
+.dd-item.sel::after{content:"✓";margin-left:8px}
+
+/* --- confidence bar --- */
+.confidence{height:8px;border-radius:6px;background:#1b1b1b;overflow:hidden;margin:8px auto 5px;
+  max-width:260px;border:1px solid rgba(255,255,255,.08)}
+.conf-fill{height:100%;border-radius:6px;transition:width .7s ease;box-shadow:0 0 12px currentColor}
+.conf-fill.UP{background:var(--up);color:var(--up)}
+.conf-fill.DOWN{background:var(--down);color:var(--down)}
+.conf-fill.NONE{background:var(--gold);color:var(--gold)}
+.conf-label{text-align:center;font-size:11.5px;color:var(--mute);margin-bottom:16px;letter-spacing:.04em}
+
+/* --- countdown ring --- */
+.cd-wrap{display:inline-flex;align-items:center;gap:6px}
+.cd-ring{width:20px;height:20px;flex:none}
+.cd-bg{fill:none;stroke:rgba(255,255,255,.14);stroke-width:2.4}
+.cd-fg{fill:none;stroke:var(--gold);stroke-width:2.4;stroke-linecap:round;
+  filter:drop-shadow(0 0 4px rgba(255,200,44,.85));transition:stroke-dashoffset 1s linear}
+
+/* --- result card entrance (replays whenever display:none is toggled off) --- */
+.result{animation:cardIn .45s cubic-bezier(.16,1,.3,1) both}
+@keyframes cardIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="logo"><div><b>SHABIR KHAN</b><i></i><span>TRADING BOT</span></div></div>
+  <div class="logo-wrap"><div class="comet-ring"></div><div class="logo"><div><b>SHABIR KHAN</b><i></i><span>TRADING BOT</span></div></div></div>
 
   <header>
     <div class="bolt"><svg viewBox="0 0 24 24" fill="none" stroke="#3a2b00" stroke-width="2.4" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
@@ -131,8 +198,11 @@ canvas{display:block;width:100%;height:190px}
   </section>
 
   <section class="card hidden" id="form">
-    <label for="asset">ASSET / PAIR</label>
-    <select id="asset"></select>
+    <label for="assetTrigger">ASSET / PAIR</label>
+    <div class="dd" id="assetDD">
+      <button type="button" class="dd-trigger" id="assetTrigger"><span id="assetLabel"></span></button>
+      <div class="dd-list hidden" id="assetList" role="listbox"></div>
+    </div>
     <div class="status" id="status">Checking market…</div>
     <div class="lbl">TRADE DURATION</div>
     <div class="durations" id="durations"></div>
@@ -188,13 +258,35 @@ function refreshKeyUI(){
 const tick = () => $("#clock").textContent = new Date().toLocaleTimeString([], {hour12:false});
 tick(); setInterval(tick, 1000); setInterval(refreshStatus, 60000);
 
-$("#asset").innerHTML = PAIRS.map(p => `<option>${p}</option>`).join("");
+let asset = PAIRS[0];
+const ddWrap = $("#assetDD"), ddTrigger = $("#assetTrigger"), ddList = $("#assetList"), assetLabel = $("#assetLabel");
+assetLabel.textContent = asset;
+ddList.innerHTML = PAIRS.map(p => `<div class="dd-item${p===asset?" sel":""}" data-p="${p}" role="option">${p}</div>`).join("");
+function closeDD(){ ddWrap.classList.remove("open"); ddList.classList.add("hidden"); }
+ddTrigger.onclick = () => { const open = ddWrap.classList.toggle("open"); ddList.classList.toggle("hidden", !open); };
+ddList.querySelectorAll(".dd-item").forEach(it => {
+  it.onclick = () => {
+    it.classList.add("flash");
+    asset = it.dataset.p; assetLabel.textContent = asset;
+    ddList.querySelectorAll(".dd-item").forEach(x => x.classList.remove("sel"));
+    it.classList.add("sel");
+    setTimeout(() => { it.classList.remove("flash"); closeDD(); }, 130);
+  };
+});
+document.addEventListener("click", e => { if(!ddWrap.contains(e.target)) closeDD(); });
 const box = $("#durations");
 EXPIRIES.forEach(e => {
   const b = document.createElement("button");
   b.textContent = e; b.setAttribute("aria-pressed", e === expiry);
   b.onclick = () => { expiry = e; [...box.children].forEach(x => x.setAttribute("aria-pressed", x === b)); };
   box.appendChild(b);
+});
+$("#go").addEventListener("click", e => {
+  const btn = e.currentTarget, r = btn.getBoundingClientRect(), d = Math.max(r.width, r.height);
+  const span = document.createElement("span"); span.className = "ripple";
+  span.style.width = span.style.height = d + "px";
+  span.style.left = (e.clientX - r.left - d/2) + "px"; span.style.top = (e.clientY - r.top - d/2) + "px";
+  btn.appendChild(span); setTimeout(() => span.remove(), 650);
 });
 $("#saveKey").onclick = () => { const k = $("#keyInput").value.trim(); if(k){ store.set("td_key", k); $("#keyInput").value = ""; refreshKeyUI(); } };
 $("#changeKey").onclick = () => { store.del("td_key"); refreshKeyUI(); };
@@ -265,7 +357,7 @@ function analyze(cs, h){
   const draw = new Set(all.filter(v => v.touches >= 2)); if(above) draw.add(above); if(below) draw.add(below);
   const levels = [...draw].map(v => ({...v, kind: v.price > px ? "res" : "sup"}));
 
-  return { direction: s >= 2 ? "UP" : s <= -2 ? "DOWN" : "NONE", rsi: +rsi[last].toFixed(1),
+  return { direction: s >= 2 ? "UP" : s <= -2 ? "DOWN" : "NONE", strength: Math.max(0, Math.min(6, Math.abs(s))), rsi: +rsi[last].toFixed(1),
            ema_trend: e9[last] > e21[last] ? "up" : "down", e9: e9.slice(-60), e21: e21.slice(-60),
            snr: zones[last], levels, win_rate: total ? +(100*wins/total).toFixed(1) : null, samples: total };
 }
@@ -311,7 +403,7 @@ async function generate(){
   $("#result").classList.add("hidden"); $("#analysis").classList.remove("hidden");
   $(".feed").classList.remove("done"); $("#ahead").classList.remove("finished"); $("#legend").classList.add("hidden");
   $("#atitle").textContent = "Analyzing market…"; setSteps(0);
-  const pair = $("#asset").value;
+  const pair = asset;
   const [interval, h] = EXP[expiry];
   try{
     if(!marketOpen()) throw new Error("Market is closed on weekends.");
@@ -334,24 +426,47 @@ async function generate(){
   }
 }
 
+function confidenceLabel(v){ return v >= 5 ? "Strong" : v >= 3 ? "Moderate" : "Weak"; }
+
+function startCountdown(expiryDate){
+  clearInterval(window.__cd);
+  const ring = $("#cdRing"), txt = $("#cdText");
+  if(!ring || !txt) return;
+  const R = 8, C = 2*Math.PI*R, total = Math.max(1, expiryDate - new Date());
+  ring.style.strokeDasharray = C;
+  const tick = () => {
+    const remain = expiryDate - new Date();
+    const pct = Math.max(0, Math.min(1, remain/total));
+    ring.style.strokeDashoffset = C*(1-pct);
+    const secLeft = Math.max(0, Math.ceil(remain/1000));
+    txt.textContent = `${String(Math.floor(secLeft/60)).padStart(2,"0")}:${String(secLeft%60).padStart(2,"0")}`;
+    if(remain <= 0) clearInterval(window.__cd);
+  };
+  tick(); window.__cd = setInterval(tick, 1000);
+}
+
 function render(s){
   const label = {UP:"UP",DOWN:"DOWN",NONE:"NO TRADE"}[s.direction];
   const sub = {UP:"BUY / CALL ▲",DOWN:"SELL / PUT ▼",NONE:"Indicators disagree. Skip this one."}[s.direction];
   const wr = s.win_rate === null ? "Not enough data" : `${s.win_rate}% (last ${s.samples} signals)`;
+  const confPct = Math.round(s.strength/6*100);
   $("#result").innerHTML = `
     <div class="dir ${s.direction}">${label}</div><div class="sub">${sub}</div>
+    <div class="confidence"><div class="conf-fill ${s.direction}" style="width:${confPct}%"></div></div>
+    <div class="conf-label">${confidenceLabel(s.strength)} signal strength</div>
     <div class="rows">
       <div><span>Asset</span><span>${s.pair}</span></div>
       <div><span>Duration</span><span>${s.expiry}</span></div>
       <div><span>Win rate</span><span>${wr}</span></div>
       <div><span>Entry time</span><span>${fmt(s.entry)}</span></div>
-      <div><span>Expiry time</span><span>${fmt(s.exp)}</span></div>
+      <div><span>Expiry time</span><span class="cd-wrap"><svg class="cd-ring" viewBox="0 0 20 20"><circle class="cd-bg" cx="10" cy="10" r="8"/><circle id="cdRing" class="cd-fg" cx="10" cy="10" r="8" transform="rotate(-90 10 10)"/></svg><span id="cdText">--:--</span></span></div>
       <div><span>Strength · Trend</span><span>${s.rsi} · ${s.ema_trend}</span></div>
       <div><span>Key level</span><span>${{support:"Near support",resistance:"Near resistance",none:"Open space"}[s.snr]}</span></div>
     </div>
     <p class="note credit">Sheryar Wazir</p>
     <p class="note" style="text-align:center;margin-top:4px">Trading involves risk.</p>`;
   $("#result").classList.remove("hidden");
+  startCountdown(s.exp);
 }
 $("#go").onclick = generate;
 refreshKeyUI();
