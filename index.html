@@ -7,6 +7,8 @@
 <link rel="icon" type="image/png" href="icon.png?v=2">
 <meta name="apple-mobile-web-app-title" content="Shabir Bot">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-startup-image" href="icon.png?v=2">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#15130c">
 <title>SHABIR KHAN TRADING BOT</title>
@@ -27,8 +29,8 @@ body{
 }
 .wrap{max-width:560px;margin:0 auto}
 .logo{
-  width:132px;height:132px;margin:0 auto 22px;border-radius:50%;background:#000;
-  border:3px solid var(--gold);display:grid;place-items:center;text-align:center;
+  width:132px;height:132px;margin:0 auto 22px;border-radius:50%;background:#000;object-fit:cover;
+  border:3px solid var(--gold);display:block;
   box-shadow:0 0 0 6px rgba(255,200,44,.12),0 0 46px rgba(255,200,44,.55),inset 0 0 26px rgba(255,200,44,.25);
 }
 .logo b{display:block;color:var(--gold);font-size:17px;font-weight:800;line-height:1.1}
@@ -176,13 +178,18 @@ canvas{display:block;width:100%;height:190px}
   filter:drop-shadow(0 0 4px rgba(255,200,44,.85));transition:stroke-dashoffset 1s linear}
 
 /* --- result card entrance (replays whenever display:none is toggled off) --- */
+.mread{margin-top:14px;padding:14px;border-radius:14px;background:#141210;border:1px solid rgba(255,255,255,.07)}
+.mread-title{color:var(--gold);font-size:13px;font-weight:800;letter-spacing:.06em;margin-bottom:8px}
+.mread-list{list-style:none;margin:0;padding:0;font-size:14px;color:var(--text);font-weight:600}
+.mread-list li{padding:5px 0 5px 16px;position:relative}
+.mread-list li::before{content:"";position:absolute;left:0;top:13px;width:6px;height:6px;border-radius:50%;background:var(--gold)}
 .result{animation:cardIn .45s cubic-bezier(.16,1,.3,1) both}
 @keyframes cardIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="logo-wrap"><div class="comet-ring"></div><div class="logo"><div><b>SHABIR KHAN</b><i></i><span>TRADING BOT</span></div></div></div>
+  <div class="logo-wrap"><div class="comet-ring"></div><img class="logo" src="logo.png" alt="Shabir Khan Trading Bot"></div>
 
   <header>
     <div class="bolt"><svg viewBox="0 0 24 24" fill="none" stroke="#3a2b00" stroke-width="2.4" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
@@ -306,6 +313,115 @@ async function getCandles(pair, interval){
 const ema = (a, span) => { const k = 2/(span+1), o = [a[0]]; for(let i=1;i<a.length;i++) o.push(a[i]*k + o[i-1]*(1-k)); return o; };
 const wilder = a => { const k = 1/14, o = [a[0]]; for(let i=1;i<a.length;i++) o.push(a[i]*k + o[i-1]*(1-k)); return o; };
 
+function candleRead(c, prevC, atrv){
+  const body = Math.abs(c.c - c.o), range = (c.h - c.l) || 1e-9;
+  const upWick = c.h - Math.max(c.o,c.c), dnWick = Math.min(c.o,c.c) - c.l, bull = c.c > c.o;
+  if(body < range*0.12) return "Doji (indecision)";
+  if(dnWick > body*2 && upWick < body*0.6) return bull ? "Hammer (possible reversal up)" : "Hanging man (caution)";
+  if(upWick > body*2 && dnWick < body*0.6) return "Shooting star (possible reversal down)";
+  if(prevC){
+    const prevBull = prevC.c > prevC.o;
+    const engulfs = Math.max(c.o,c.c) >= Math.max(prevC.o,prevC.c) && Math.min(c.o,c.c) <= Math.min(prevC.o,prevC.c);
+    if(engulfs && bull !== prevBull) return bull ? "Bullish engulfing" : "Bearish engulfing";
+  }
+  if(body > atrv*0.9) return bull ? "Strong bullish candle" : "Strong bearish candle";
+  if(body < atrv*0.35) return "Weak / indecisive candle";
+  return bull ? "Bullish candle" : "Bearish candle";
+}
+
+function structureRead(cs){
+  const win = cs.slice(Math.max(0, cs.length-40));
+  const highs = win.map(c=>c.h), lows = win.map(c=>c.l);
+  const span = Math.max(...highs) - Math.min(...lows), drift = win[win.length-1].c - win[0].c;
+  if(Math.abs(drift) < span*0.22) return "Ranging market";
+  return drift > 0 ? "Uptrend structure" : "Downtrend structure";
+}
+
+function breakoutRead(cs, levels, atrv){
+  if(!levels || !levels.length) return null;
+  const px = cs[cs.length-1].c, prevPx = cs[cs.length-2].c;
+  for(const v of levels){
+    const brokeUp = prevPx < v.price && px > v.price + atrv*0.1;
+    const brokeDown = prevPx > v.price && px < v.price - atrv*0.1;
+    if(brokeUp || brokeDown){
+      const back = cs[cs.length-3];
+      if(back && ((brokeUp && back.c > v.price) || (brokeDown && back.c < v.price)))
+        return brokeUp ? "Possible fake breakout (up)" : "Possible fake breakout (down)";
+      return brokeUp ? "Breakout above a level" : "Breakdown below a level";
+    }
+  }
+  return null;
+}
+
+function findFVG(cs){
+  const n = cs.length;
+  for(let i=n-3;i>=Math.max(2,n-40);i--){
+    const a = cs[i-2], c = cs[i];
+    if(a.h < c.l){
+      let filled = false;
+      for(let j=i+1;j<n;j++) if(cs[j].l <= c.l){ filled = true; break; }
+      if(!filled) return "Bullish gap below price";
+    }
+    if(a.l > c.h){
+      let filled = false;
+      for(let j=i+1;j<n;j++) if(cs[j].h >= c.h){ filled = true; break; }
+      if(!filled) return "Bearish gap above price";
+    }
+  }
+  return "No unfilled gap nearby";
+}
+
+function findOrderBlock(cs, atrv){
+  const n = cs.length;
+  for(let i=n-4;i>=Math.max(1,n-40);i--){
+    const c1 = cs[i+1], c2 = cs[i+2], c3 = cs[i+3];
+    if(!c3) continue;
+    const up = c1.c>c1.o && c2.c>c2.o && c3.c>c3.o && (c3.c-c1.o) > atrv*1.5;
+    const down = c1.c<c1.o && c2.c<c2.o && c3.c<c3.o && (c1.o-c3.c) > atrv*1.5;
+    const ob = cs[i];
+    if(up && ob.c < ob.o) return "Bullish order block below";
+    if(down && ob.c > ob.o) return "Bearish order block above";
+  }
+  return "No fresh order block";
+}
+
+function liquidityRead(levels, px, atrv){
+  if(!levels || !levels.length) return "No liquidity pool nearby";
+  const pool = levels.find(v => v.touches >= 2 && Math.abs(v.price-px) <= atrv*1.5);
+  if(!pool) return "No liquidity pool nearby";
+  return pool.price > px ? "Liquidity resting above" : "Liquidity resting below";
+}
+
+function fvgOpportunityAt(cs, idx){
+  for(let i=idx-2;i>=Math.max(2, idx-40);i--){
+    const a = cs[i-2], c = cs[i];
+    if(a.h < c.l){
+      let filled = false;
+      for(let j=i+1;j<=idx;j++) if(cs[j].l <= a.h){ filled = true; break; }
+      if(!filled){ const px = cs[idx].c; if(px >= a.h*0.9992 && px <= c.l*1.0008) return "UP"; }
+    }
+    if(a.l > c.h){
+      let filled = false;
+      for(let j=i+1;j<=idx;j++) if(cs[j].h >= a.l){ filled = true; break; }
+      if(!filled){ const px = cs[idx].c; if(px <= a.l*1.0008 && px >= c.h*0.9992) return "DOWN"; }
+    }
+  }
+  return null;
+}
+
+function obOpportunityAt(cs, atrv, idx){
+  for(let i=idx-4;i>=Math.max(1, idx-40);i--){
+    const c1 = cs[i+1], c2 = cs[i+2], c3 = cs[i+3];
+    if(!c3) continue;
+    const up = c1.c>c1.o && c2.c>c2.o && c3.c>c3.o && (c3.c-c1.o) > atrv*1.5;
+    const down = c1.c<c1.o && c2.c<c2.o && c3.c<c3.o && (c1.o-c3.c) > atrv*1.5;
+    const ob = cs[i], lo = Math.min(ob.o,ob.c), hi = Math.max(ob.o,ob.c), px = cs[idx].c;
+    if(up && ob.c < ob.o && px >= lo-atrv*0.3 && px <= hi+atrv*0.3) return "UP";
+    if(down && ob.c > ob.o && px >= lo-atrv*0.3 && px <= hi+atrv*0.3) return "DOWN";
+  }
+  return null;
+}
+
 function analyze(cs, h){
   const closes = cs.map(c => c.c), n = closes.length;
   const e9 = ema(closes,9), e21 = ema(closes,21), g = [0], l = [0];
@@ -339,14 +455,38 @@ function analyze(cs, h){
   };
   const zones = closes.map((_,i) => i < 30 ? "none" : zone(i));
 
+  // trend + momentum vote (this alone used to be the whole signal; now it is just ONE of several
+  // independent setups below, so a trade is not thrown away just because this one didn't confirm)
   const score = closes.map((_,i) => Math.sign(e9[i]-e21[i]) + Math.sign(hist[i])
-      + (rsi[i] > 55 ? 1 : rsi[i] < 45 ? -1 : 0) - (rsi[i] > 75 ? 2 : 0) + (rsi[i] < 25 ? 2 : 0)
-      + (zones[i] === "support" ? 1 : zones[i] === "resistance" ? -1 : 0));
+      + (rsi[i] > 55 ? 1 : rsi[i] < 45 ? -1 : 0) - (rsi[i] > 75 ? 2 : 0) + (rsi[i] < 25 ? 2 : 0));
+
+  // each setup below can independently justify a trade: support/resistance, an FVG fill-in-progress,
+  // or a return to an order block. Any ONE of them firing is enough; we don't require all of them together.
+  function votesAt(i){
+    const v = [];
+    if(Math.abs(score[i]) >= 2) v.push(score[i] > 0 ? "UP" : "DOWN");
+    if(zones[i] === "support") v.push("UP");
+    if(zones[i] === "resistance") v.push("DOWN");
+    const fvg = fvgOpportunityAt(cs, i); if(fvg) v.push(fvg);
+    const ob = obOpportunityAt(cs, atr[i], i); if(ob) v.push(ob);
+    return v;
+  }
+  function decideAt(i){
+    const v = votesAt(i);
+    if(!v.length) return "NONE";
+    const up = v.filter(x => x === "UP").length, dn = v.length - up;
+    return up > dn ? "UP" : dn > up ? "DOWN" : "NONE";
+  }
+
   let wins = 0, total = 0;
   for(let i=30;i<n-h;i++){
-    if(Math.abs(score[i]) >= 2){ total++; if((closes[i+h]-closes[i]) * Math.sign(score[i]) > 0) wins++; }
+    const d = decideAt(i);
+    if(d !== "NONE"){ total++; if((closes[i+h]-closes[i]) * (d === "UP" ? 1 : -1) > 0) wins++; }
   }
-  const last = n-1, s = score[last], px = closes[last];
+  const last = n-1, px = closes[last];
+  const lastVotes = votesAt(last), lastUp = lastVotes.filter(x => x === "UP").length, lastDn = lastVotes.length - lastUp;
+  const direction = decideAt(last);
+  const strength = Math.max(0, Math.min(6, Math.max(lastUp, lastDn) * 2));
 
   // levels to draw: merge nearby pivots, keep repeated ones plus the closest above and below price
   const merged = [], tolc = 0.4*atr[last];
@@ -360,9 +500,17 @@ function analyze(cs, h){
   const draw = new Set(all.filter(v => v.touches >= 2)); if(above) draw.add(above); if(below) draw.add(below);
   const levels = [...draw].map(v => ({...v, kind: v.price > px ? "res" : "sup"}));
 
-  return { direction: s >= 2 ? "UP" : s <= -2 ? "DOWN" : "NONE", strength: Math.max(0, Math.min(6, Math.abs(s))), rsi: +rsi[last].toFixed(1),
+  const read = {
+    candle: candleRead(cs[last], cs[last-1], atr[last]),
+    structure: structureRead(cs),
+    breakout: breakoutRead(cs, levels, atr[last]),
+    fvg: findFVG(cs),
+    orderBlock: findOrderBlock(cs, atr[last]),
+    liquidity: liquidityRead(levels, px, atr[last]),
+  };
+  return { direction, strength, rsi: +rsi[last].toFixed(1),
            ema_trend: e9[last] > e21[last] ? "up" : "down", e9: e9.slice(-60), e21: e21.slice(-60),
-           snr: zones[last], levels, win_rate: total ? +(100*wins/total).toFixed(1) : null, samples: total };
+           snr: zones[last], levels, read, win_rate: total ? +(100*wins/total).toFixed(1) : null, samples: total };
 }
 
 function drawChart(all, r){
@@ -403,7 +551,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function generate(){
   const btn = $("#go"); btn.disabled = true; btn.textContent = "ANALYZING…";
-  $("#result").classList.add("hidden"); $("#analysis").classList.remove("hidden");
+  $("#result").classList.add("hidden"); reveal($("#analysis"));
   $(".feed").classList.remove("done"); $("#ahead").classList.remove("finished"); $("#legend").classList.add("hidden");
   $("#atitle").textContent = "Analyzing market…"; setSteps(0);
   const pair = asset;
@@ -450,7 +598,7 @@ function startCountdown(expiryDate){
 
 function render(s){
   const label = {UP:"UP",DOWN:"DOWN",NONE:"NO TRADE"}[s.direction];
-  const sub = {UP:"BUY / CALL ▲",DOWN:"SELL / PUT ▼",NONE:"Indicators disagree. Skip this one."}[s.direction];
+  const sub = {UP:"BUY / CALL ▲",DOWN:"SELL / PUT ▼",NONE:""}[s.direction];
   const wr = s.win_rate === null ? "Not enough data" : `${s.win_rate}% (last ${s.samples} signals)`;
   const confPct = Math.round(s.strength/6*100);
   $("#result").innerHTML = `
@@ -466,8 +614,19 @@ function render(s){
       <div><span>Strength · Trend</span><span>${s.rsi} · ${s.ema_trend}</span></div>
       <div><span>Key level</span><span>${{support:"Near support",resistance:"Near resistance",none:"Open space"}[s.snr]}</span></div>
     </div>
-    <p class="note credit">Sheryar Wazir</p>
-    <p class="note" style="text-align:center;margin-top:4px">Trading involves risk.</p>`;
+    <div class="mread">
+      <div class="mread-title">Market read</div>
+      <ul class="mread-list">
+        <li>${s.read.candle}</li>
+        <li>${s.read.structure}</li>
+        ${s.read.breakout ? `<li>${s.read.breakout}</li>` : ""}
+        <li>${s.read.fvg}</li>
+        <li>${s.read.orderBlock}</li>
+        <li>${s.read.liquidity}</li>
+      </ul>
+      <p class="note" style="margin-top:8px">Informational only — a heuristic reading of the chart, not a separate signal.</p>
+    </div>
+    <p class="note credit">Sheryar Wazir</p>`;
   reveal($("#result"));
   startCountdown(s.exp);
 }
